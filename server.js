@@ -62,14 +62,9 @@ app.get('/home', (req, res) => {
 app.post("/auth/register", async (req, res) => {
   const { email, password, password_confirm} = req.body;
 
-  console.log('Email:', email);
-  console.log('Password:', password);
-  console.log('Password Confirm:', password_confirm);
-
   db.query('SELECT email FROM users WHERE email = ?', 
   [email], async (error, result) => {
       if (error) { console.log(err) }
-      console.log('Result:', result);
 
       if (result.length > 0){
           return res.render('register', {
@@ -116,10 +111,12 @@ app.post('/auth/login', async (req, res) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (isPasswordValid){
+
       req.session.user = {
         email: user.email,
         password: user.password
       };
+
       return res.redirect('/home');
     } else {
       return res.status(401).render('/login', {
@@ -130,46 +127,51 @@ app.post('/auth/login', async (req, res) => {
   })
 })
 
-
-app.post('/home', (req, res) => {
-  const { sender, receiver, subject, message } = req.body;
-    db.query('INSERT INTO sent_mails SET ?', {sender: sender, receiver: receiver})
-
-  /*  let receiverArray =[];
-  if (receiver.includes(',')){
-    receiverArray = receiver.split(',').map(email => email.trim());
+// Authentication middleware
+const authenticateUser = (req, res, next) => {
+  if (req.session.user) {
+    next();
   } else {
-    receiverArray = [receiver.trim()];
-  }*/
+    res.redirect('/login');
+  }
+};
 
+app.post('/home', authenticateUser, (req, res) => {
+  const { receiver, subject, message } = req.body;
   const { email, password } = req.session.user;
-
-  // Nodemailer code to send email
-  let transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: email,
-      pass: password
+  db.query('INSERT INTO sent_mails SET ?', {sender: email, receiver: receiver}, (err, result) => {
+    if (err){
+      console.log('Error inserting into database: ', err);
+      return res.status(500).send('Internal Server Error');
     }
-  });
-  
-  let mailOptions = {
-    from: sender,
-    to: receiver,
-    subject: subject,
-    text: message
-  };
 
-  transporter.sendMail(mailOptions, (err, info) => {
-    if (err){ 
-      console.log('Error ' + err);
-    } else {
-        res.send('Email sent successfully!');
-        console.log('Email sent successfully!');
-        console.log('Message ID:', info.messageId);
-        console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
-    }
-  });
+    // Nodemailer code to send email
+    let transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: email,
+        pass: password
+      }
+    });
+
+    let mailOptions = {
+      from: email,
+      to: receiver,
+      subject: subject,
+      text: message
+    };
+
+    transporter.sendMail(mailOptions, (err, info) => {
+      if (err){ 
+        console.log('Error ' + err);
+      } else {
+          res.send('Email sent successfully!');
+          console.log('Email sent successfully!');
+          console.log('Message ID:', info.messageId);
+          console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      }
+    });
+  })
 })
 
 
