@@ -6,7 +6,6 @@ const nodemailer = require('nodemailer');
 const mysql2 = require('mysql2');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-const hbs = require('hbs');
 const app = express();
 
 
