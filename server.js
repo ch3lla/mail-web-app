@@ -1,5 +1,6 @@
 const dotenv = require('dotenv');
 dotenv.config();
+const expressHandlebars = require('express-handlebars');
 const express = require('express');
 const nodemailer = require('nodemailer');
 const mysql2 = require('mysql2');
@@ -12,8 +13,14 @@ const app = express();
 const path = require("path");
 const publicDir = path.join(__dirname, './public');
 
-// Set EJS as templating engine
-app.set('view engine', 'hbs');
+// Set handlebars as templating engine
+app.set('views', path.join(__dirname, 'views'))
+app.engine('handlebars', expressHandlebars.engine({
+    extname: '.handlebars',
+    defaultLayout: 'layout',
+    layoutsDir: "views/layouts"
+}));
+app.set('view engine', 'handlebars');
 
 //  MiddleWare
 app.use(express.static(publicDir));
@@ -55,18 +62,19 @@ app.get('/register', (req, res) => {
   res.render('register');
 });
 
-app.get('/home', (req, res) => {
-  res.render('home');
+app.get('/send', (req, res) => {
+  res.render('send');
 });
 
-app.post("/auth/register", async (req, res) => {
+app.post("/register", async (req, res) => {
   const { email, password, password_confirm} = req.body;
 
   db.query('SELECT email FROM users WHERE email = ?', 
   [email], async (error, result) => {
-      if (error) { console.log(err) }
-
-      if (result.length > 0){
+    console.log("Result: ", result);
+      if (error) { 
+        console.log("Error: ", error)
+     } else if (result.length > 0){
           return res.render('register', {
               message: 'This email is already in use'
           })
@@ -81,45 +89,40 @@ app.post("/auth/register", async (req, res) => {
 
   db.query('INSERT INTO users SET ?', {  email: email, password: hashedPassword}, (err, result) => {
       if(err){
-          console.log(err);
+          console.log("Error: ", err);
           return res.render('register', {
             message: 'An error occured'
           });
-      } 
-      return res.redirect('/login');
+      } else {
+        console.log("Successfully registered!")
+      }
   })
+  res.redirect('/login');
 })
 
-app.post('/auth/login', async (req, res) => {
-  const { email, password} = req.body;
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
 
   db.query('SELECT * FROM users WHERE email = ?', [email], 
   async (error, result) => {
     if (error) {
-      console.error(error);
       return res.status(500).send('Internal Server Error');
-    }
-    
-    if (result.length === 0){
-      return res.status(401).render('login', {
+    } else if (result.length === 0){
+      return res.render('login', {
         message: "Invalid Login Credentials"
       })
     }
 
     const user = result[0];
-
     const isPasswordValid = await bcrypt.compare(password, user.password);
-
     if (isPasswordValid){
-
       req.session.user = {
         email: user.email,
         password: user.password
       };
-
-      return res.redirect('/home');
+      res.redirect('/send');
     } else {
-      return res.status(401).render('/login', {
+      return res.render('/login', {
         message: 'Invalid Login Credentials'
       })
     }
@@ -136,7 +139,7 @@ const authenticateUser = (req, res, next) => {
   }
 };
 
-app.post('/home', authenticateUser, (req, res) => {
+app.post('/send', authenticateUser, (req, res) => {
   const { receiver, subject, message } = req.body;
   const { email, password } = req.session.user;
   db.query('INSERT INTO sent_mails SET ?', {sender: email, receiver: receiver}, (err, result) => {
@@ -147,12 +150,24 @@ app.post('/home', authenticateUser, (req, res) => {
 
     // Nodemailer code to send email
     let transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
       auth: {
         user: email,
         pass: password
       }
     });
+
+
+    // Verify the SMTP connection
+    transporter.verify((error, success) => {
+      if (error) {
+        console.log("Error: ", error);
+      } else {
+        console.log("Server is ready to take our messages");
+      }
+    });
+
 
     let mailOptions = {
       from: email,

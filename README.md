@@ -78,3 +78,4 @@ MailWebApp makes use of the following open-source libraries and technologies:
 - bcryptjs: https://github.com/dcodeIO/bcrypt.js
 - express-session: https://github.com/expressjs/session
 - mysql2: https://github.com/mysqljs/mysql2
+ 
